@@ -1,0 +1,43 @@
+# ./config/data-prepper.yaml
+log-pipeline:
+  workers: 4
+  delay: 100
+  source:
+    http:
+      port: 2021
+      path: "/log/ingest"
+      ssl: false
+      authentication:
+        unauthenticated:
+          enabled: true
+
+  processor:
+    - grok:
+        match:
+          # Pattern for standard nginx access log format
+          message: ["%{IPORHOST:client_ip} - %{DATA:user_name} \[%{HTTPDATE:timestamp}\] \"%{WORD:http_method} %{DATA:url} HTTP/%{NUMBER:http_version}\" %{NUMBER:response_code} %{NUMBER:body_sent_bytes} \"%{DATA:referrer}\" \"%{DATA:user_agent}\""]
+    - date:
+        from_time_received: false
+        source: timestamp
+        destination: "@timestamp"
+        patterns:
+          - "dd/MMM/yyyy:HH:mm:ss Z"
+    - add_fields:
+        fields:
+          source_type: "nginx"
+          environment: "production"
+
+  sink:
+    - opensearch:
+        hosts: ["http://opensearch-node1:9200"]
+        username: "admin"
+        password: "Anubhav@321"
+        index_type: "custom"
+        index: "nginx-logs-%{+yyyy.MM.dd}"
+        bulk_size: 100
+        retry_count: 3
+        dlq_file: "/tmp/failed_logs.dlq"
+        document_id_field: "request_id"
+        delete_index_template: true
+        template_file: null
+        action_type: "index"
